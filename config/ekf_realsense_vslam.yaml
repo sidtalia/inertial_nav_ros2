@@ -1,0 +1,51 @@
+# EKF INS: MAVROS FCU IMU + Isaac cuVSLAM (stereo-only, no camera IMU).
+
+nav_filter_ekf:
+  ros__parameters:
+    use_sim_time: false
+    executor_threads: 2
+
+    pose_z_is_down: true
+    body_axes: ros_flu
+    max_transport_delay_ms: 500
+    output_frame: map
+    child_frame: base_link
+
+    ext_nav_origin:
+      lat: 37.8715
+      lon: -122.2730
+      hgt: 0.0
+
+    enable:
+      pose_src1: true
+      pose_src2: false
+      odom_src1: false
+      odom_src2: false
+      mag_src1: false
+      mag_src2: false
+      baro: false
+
+    topics:
+      imu: /mavros/imu/data
+      pose_src1: pose_src1
+      pose_src1_odom: /visual_slam/tracking/odometry
+      pose_src2: pose_src2
+      pose_src2_odom: ""
+      odom_src1: odom_src1
+      odom_src2: odom_src2
+      mag_src1: mag_src1
+      mag_src2: mag_src2
+      baro: baro
+
+    pose_src1:
+      delay_ms:
+        pos: 100
+        yaw: 100
+        vel: 100
+      fuse_height: true
+      fuse_yaw: true
+      fuse_vel: false
+
+    baro:
+      delay_ms: 50
+      default_sigma: 1.0
