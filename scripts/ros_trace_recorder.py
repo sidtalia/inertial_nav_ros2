@@ -119,7 +119,7 @@ def parse_args():
         help="output .pkl path (viser_log.py compatible)",
     )
     parser.add_argument("--test-name", default="ros_pose_jump")
-    parser.add_argument("--profile", default="zed_vslam")
+    parser.add_argument("--profile", default="realsense_vslam")
     parser.add_argument("--jump-at", type=float, default=None)
     parser.add_argument("--jump-dpos-ned", type=float, nargs=3, default=None)
     return parser.parse_args()

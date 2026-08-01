@@ -71,7 +71,6 @@ install(PROGRAMS
   scripts/mujoco_sim_pub.py
   scripts/ros_sim_validator.py
   scripts/ros_trace_recorder.py
-  scripts/extnav_earth_align_node.py
   DESTINATION lib/${PROJECT_NAME}
 )
 install(DIRECTORY launch config

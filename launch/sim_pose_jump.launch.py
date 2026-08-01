@@ -1,4 +1,4 @@
-"""Launch pose-jump scenario: MuJoCo sim + zed_vslam-like EKF + trace recorder + optional viser."""
+"""Launch pose-jump scenario: MuJoCo sim + EKF (ext_nav profile) + trace recorder + optional viser."""
 
 import os
 from pathlib import Path
@@ -24,7 +24,7 @@ def generate_launch_description():
     viser_log = str(shim_root / "scripts" / "viser_log.py")
 
     default_params = PathJoinSubstitution(
-        [FindPackageShare("inertial_nav_ros2"), "config", "ekf_sim_zed_vslam.yaml"]
+        [FindPackageShare("inertial_nav_ros2"), "config", "ekf_sim_ext_nav.yaml"]
     )
 
     duration = LaunchConfiguration("duration")
@@ -63,7 +63,7 @@ def generate_launch_description():
             "--test-name",
             "ros_ext_nav_pose_jump",
             "--profile",
-            "zed_vslam_sim",
+            "ext_nav_sim",
             "--jump-at",
             jump_at,
             "--jump-dpos-ned",
@@ -73,7 +73,6 @@ def generate_launch_description():
         ],
         output="screen",
     )
-
 
     ekf_node = Node(
         package="inertial_nav_ros2",
