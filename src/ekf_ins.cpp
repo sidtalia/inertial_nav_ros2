@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <memory>
 
 #include "ekf_time.h"
 #include "inertial_nav_ros2/frame_conversions.hpp"
@@ -18,7 +19,9 @@
 #include "tf2/time.h"
 #include "tf2/LinearMath/Matrix3x3.h"
 #include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
+#include "geometry_msgs/msg/transform_stamped.hpp"
 #include "tf2_ros/buffer.h"
+#include "tf2_ros/transform_broadcaster.h"
 #include "tf2_ros/transform_listener.h"
 
 namespace inertial_nav_ros2 {
@@ -170,6 +173,14 @@ EkfIns::EkfIns(const rclcpp::NodeOptions & options)
   }
 
   odom_pub_ = create_publisher<nav_msgs::msg::Odometry>("ekf/odometry", rclcpp::QoS(10));
+  if (publish_tf_) {
+    tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
+  }
+
+  reset_sub_ = create_subscription<std_msgs::msg::Empty>(
+    reset_topic_, rclcpp::QoS(1),
+    [this](const std_msgs::msg::Empty::SharedPtr msg) { on_reset(*msg); },
+    sensor_options);
 
   bool need_tf = false;
   for (const auto & p : pose_params_) {
@@ -188,7 +199,7 @@ EkfIns::EkfIns(const rclcpp::NodeOptions & options)
   RCLCPP_INFO(
     get_logger(),
     "EkfIns ready (nav_filter from Inertial_nav_shim). input_in_enu=%s body_axes=%s "
-    "origin=(%.6f, %.6f, %.1f) init_reference=%s",
+    "origin=(%.6f, %.6f, %.1f) init_reference=%s reset_topic=%s",
     pose_z_is_down_ ? "true" : "false",
     pose_z_is_down_ ?
     (body_axes_ == frames::BodyAxes::MujocoEnu ? "mujoco_enu" :
@@ -196,7 +207,8 @@ EkfIns::EkfIns(const rclcpp::NodeOptions & options)
     "passthrough",
     ext_nav_origin_lat_, ext_nav_origin_lon_, ext_nav_origin_hgt_,
     init_reference_ == InitReferenceSource::IMU_AHRS ? "imu_ahrs" :
-    init_reference_ == InitReferenceSource::GPS ? "gps" : "ext_nav");
+    init_reference_ == InitReferenceSource::GPS ? "gps" : "ext_nav",
+    reset_topic_.c_str());
 }
 
 EkfIns::~EkfIns() = default;
@@ -241,8 +253,9 @@ void EkfIns::declare_parameters()
   body_axes_ = frames::body_axes_from_string(
     declare_parameter<std::string>("body_axes", "ros_flu"));
   max_transport_delay_ms_ = declare_parameter<int>("max_transport_delay_ms", 500);
-  output_frame_ = declare_parameter<std::string>("output_frame", "map");
+  output_frame_ = declare_parameter<std::string>("output_frame", "odom");
   child_frame_ = declare_parameter<std::string>("child_frame", "base_link");
+  publish_tf_ = declare_parameter<bool>("publish_tf", true);
   const std::string init_ref_str = declare_parameter<std::string>("init_reference", "ext_nav");
   if (init_ref_str == "imu_ahrs" || init_ref_str == "ahrs") {
     init_reference_ = InitReferenceSource::IMU_AHRS;
@@ -252,6 +265,7 @@ void EkfIns::declare_parameters()
     init_reference_ = InitReferenceSource::EXT_NAV;
   }
   imu_topic_ = declare_parameter<std::string>("topics.imu", "imu");
+  reset_topic_ = declare_parameter<std::string>("reset_topic", "~/reset");
   declare_parameter<int>("executor_threads", 2);
 
   ext_nav_origin_lat_ = declare_parameter<double>("ext_nav_origin.lat", 0.0);
@@ -870,12 +884,23 @@ void EkfIns::ekf_ins_run(const sensor_msgs::msg::Imu & imu, const SensorSnapshot
     ekf_.setAirData(0.0f, snapshot.baro.height_m, snapshot.baro.sigma, imu_dt, true, false);
   }
 
-  ekf_.run_filter(filter_reset_);
-  filter_reset_ = false;
+  const bool do_reset = filter_reset_.exchange(false);
+  ekf_.run_filter(do_reset);
 
   if (ekf_.is_initialized()) {
     publish_odometry(t_ms);
   }
+}
+
+void EkfIns::on_reset(const std_msgs::msg::Empty & /*msg*/)
+{
+  filter_reset_.store(true);
+  RCLCPP_WARN(
+    get_logger(),
+    "EKF reset requested — re-initializing at ext_nav_origin "
+    "(lat=%.6f lon=%.6f hgt=%.1f)",
+    ext_nav_origin_lat_, ext_nav_origin_lon_,
+    static_cast<double>(ext_nav_origin_hgt_));
 }
 
 void EkfIns::ned_state_to_odom(
@@ -985,6 +1010,17 @@ void EkfIns::publish_odometry(uint32_t stamp_ms)
   ned_state_to_odom(core->states, stamp_ms, odom);
   fill_output_covariance(core->P, core->states, odom);
   odom_pub_->publish(odom);
+  if (!tf_broadcaster_) {
+    return;
+  }
+  geometry_msgs::msg::TransformStamped tf;
+  tf.header = odom.header;
+  tf.child_frame_id = odom.child_frame_id;
+  tf.transform.translation.x = odom.pose.pose.position.x;
+  tf.transform.translation.y = odom.pose.pose.position.y;
+  tf.transform.translation.z = odom.pose.pose.position.z;
+  tf.transform.rotation = odom.pose.pose.orientation;
+  tf_broadcaster_->sendTransform(tf);
 }
 
 }  // namespace inertial_nav_ros2

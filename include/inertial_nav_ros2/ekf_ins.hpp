@@ -1,7 +1,9 @@
 #pragma once
 
 #include <array>
+#include <atomic>
 #include <cstdint>
+#include <memory>
 #include <mutex>
 #include <string>
 
@@ -15,11 +17,13 @@
 #include "sensor_msgs/msg/imu.hpp"
 #include "sensor_msgs/msg/magnetic_field.hpp"
 #include "sensor_msgs/msg/fluid_pressure.hpp"
+#include "std_msgs/msg/empty.hpp"
 #include "std_msgs/msg/float64.hpp"
 
 namespace tf2_ros {
 class Buffer;
 class TransformListener;
+class TransformBroadcaster;
 }
 
 namespace inertial_nav_ros2 {
@@ -91,6 +95,7 @@ private:
   void on_mag(std::size_t id, const sensor_msgs::msg::MagneticField & msg);
   void on_baro(const std_msgs::msg::Float64 & msg);
   void on_baro_pressure(const sensor_msgs::msg::FluidPressure & msg);
+  void on_reset(const std_msgs::msg::Empty & msg);
 
   SensorSnapshot take_sensor_snapshot();
   void ekf_ins_run(const sensor_msgs::msg::Imu & imu, const SensorSnapshot & snapshot);
@@ -120,7 +125,7 @@ private:
   std::mutex cache_mutex_;
   std::mutex ekf_mutex_;
 
-  bool filter_reset_{true};
+  std::atomic<bool> filter_reset_{true};
   bool have_prev_imu_stamp_{false};
   uint32_t prev_imu_stamp_ms_{0};
 
@@ -128,11 +133,13 @@ private:
   frames::BodyAxes body_axes_{frames::BodyAxes::RosFlu};
   uint32_t max_transport_delay_ms_{500};
   std::string imu_topic_;
-  std::string output_frame_{"map"};
+  std::string output_frame_{"odom"};
   std::string child_frame_{"base_link"};
+  bool publish_tf_{true};
   InitReferenceSource init_reference_{InitReferenceSource::EXT_NAV};
   std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
+  std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
 
   double ext_nav_origin_lat_{0.0};
   double ext_nav_origin_lon_{0.0};
@@ -208,7 +215,10 @@ private:
   std::array<rclcpp::Subscription<sensor_msgs::msg::MagneticField>::SharedPtr, kNumMag> mag_subs_{};
   rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr baro_sub_;
   rclcpp::Subscription<sensor_msgs::msg::FluidPressure>::SharedPtr baro_pressure_sub_;
+  rclcpp::Subscription<std_msgs::msg::Empty>::SharedPtr reset_sub_;
   rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_pub_;
+
+  std::string reset_topic_{"~/reset"};
 };
 
 }  // namespace inertial_nav_ros2

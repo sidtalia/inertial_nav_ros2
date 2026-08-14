@@ -8,8 +8,12 @@ nav_filter_ekf:
     pose_z_is_down: true
     body_axes: ros_flu
     max_transport_delay_ms: 500
-    output_frame: map
+    output_frame: odom
     child_frame: base_link
+    publish_tf: true
+    # Soft reset to ext_nav_origin:
+    #   ros2 topic pub --once /nav_filter_ekf/reset std_msgs/msg/Empty {}
+    reset_topic: ~/reset
 
     ext_nav_origin:
       lat: 37.8715
